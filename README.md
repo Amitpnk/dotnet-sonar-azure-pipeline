@@ -1,0 +1,1 @@
+# dotnet-sonar-azure-pipeline
