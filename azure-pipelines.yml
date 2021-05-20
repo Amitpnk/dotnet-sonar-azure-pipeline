@@ -1,34 +1,55 @@
-# ASP.NET
-# Build and test ASP.NET projects.
-# Add steps that publish symbols, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
-
-trigger:
-- main
-
 pool:
-  vmImage: 'windows-latest'
+  name: Azure Pipelines
 
 variables:
-  solution: '**/*.sln'
-  buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
+  BuildConfiguration: 'Release'
+  ShortVersion: '1.0.0'
 
 steps:
-- task: NuGetToolInstaller@1
-
-- task: NuGetCommand@2
+- task: SonarSource.sonarcloud.14d9cde6-c1da-4d55-aa01-2965cd301255.SonarCloudPrepare@1
+  displayName: 'Prepare analysis on SonarCloud'
   inputs:
-    restoreSolution: '$(solution)'
+    SonarCloud: 'amitpnk'
+    # organization: MyOrganisation
+    projectKey: 'Amitpnk_sonar-cloud'
+    projectName: 'sonar-cloud'
+    extraProperties: |
+     sonar.exclusions=**/obj/**,**/*.dll
+     sonar.cs.nunit.reportsPaths=${Agent.TempDirectory}/**/NUnit.TestResults.xml
+     sonar.cs.opencover.reportsPaths=${Agent.TempDirectory}/**/opencoverCoverage.xml
 
-- task: VSBuild@1
+- task: DotNetCoreCLI@2
+  displayName: Restore
   inputs:
-    solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+    command: restore
+    projects: '**/*.csproj'
+    noCache: true
 
-- task: VSTest@2
+- task: DotNetCoreCLI@2
+  displayName: Build
   inputs:
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
+    projects: '**/*.csproj'
+    arguments: '--configuration $(BuildConfiguration) /property:Version=$(ShortVersion) --no-restore'
+
+- task: DotNetCoreCLI@2
+  displayName: Test
+  inputs:
+    command: test
+    projects: '**/*.UnitTest.csproj'
+      arguments: '--configuration $(BuildConfiguration) --no-build /p:CollectCoverage=true /p:CoverletOutputFormat=opencover /p:CoverletOutput=$(Agent.TempDirectory)/coverage/ /p:MergeWith=$(Agent.TempDirectory)/coverage/ --collect "Code coverage"'
+  
+- task: PublishTestResults@2
+  displayName: "Publish Test Results"
+  inputs:
+    testResultsFormat: VSTest
+    testResultsFiles: "$(Agent.TempDirectory)/**.*trx"
+    mergeTestResults: true
+    condition: succeededOrFailed()
+      
+- task: SonarSource.sonarcloud.ce096e50-6155-4de8-8800-4221aaeed4a1.SonarCloudAnalyze@1
+  displayName: 'Run Code Analysis'
+
+- task: SonarSource.sonarcloud.38b27399-a642-40af-bb7d-9971f69712e8.SonarCloudPublish@1
+  displayName: 'Publish Quality Gate Result'
+
+# I would then package and publish the app
