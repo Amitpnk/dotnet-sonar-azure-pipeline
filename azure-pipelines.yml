@@ -1,42 +1,45 @@
 pool:
   vmImage: 'windows-latest'
-  
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
 steps:
-- task: UseDotNet@2
-  inputs:
-    packageType: 'sdk'
 - task: DotNetCoreCLI@2
-  displayName: Restore
+  displayName: 'Restore solution'
   inputs:
     command: 'restore'
-    projects: '**/*.sln'    
+    projects: '**/*.sln'
+    feedsToUse: 'select'
 
-- task: SonarSource.sonarcloud.14d9cde6-c1da-4d55-aa01-2965cd301255.SonarCloudPrepare@1
-  displayName: 'Prepare analysis on SonarCloud'
+- task: SonarCloudPrepare@1
+  displayName: 'Prepare analysis configuration'
   inputs:
     SonarCloud: 'SC'
     organization: 'amitpnk'
+    scannerMode: 'MSBuild'
     projectKey: 'Amitpnk_sonar-cloud'
-    extraProperties: |
-     sonar.exclusions=**/obj/**,**/*.dll
-     sonar.cs.opencover.reportsPaths=$(Build.SourcesDirectory)/**/coverage.opencover.xml
-     sonar.cs.vstest.reportsPaths=$(Agent.TempDirectory)/*.trx
+    projectName: 'Sample .NET Core project with Azure DevOps'
 
 - task: DotNetCoreCLI@2
-  displayName: Build
+  displayName: 'Build solution'
   inputs:
+    command: 'build'
     projects: '**/*.sln'
-    arguments: '--configuration Release'
 
 - task: DotNetCoreCLI@2
-  displayName: Test
+  displayName: 'Execute Unit tests'
   inputs:
-    command: test
-    projects: '**/*.sln'
-    arguments: '--configuration Release /p:CollectCoverage=true /p:CoverletOutputFormat=opencover --logger trx'
+    command: 'test'
+    projects: '**/*.csproj'
+    arguments: '--collect "Code Coverage"'
 
 - task: SonarCloudAnalyze@1
-  displayName: 'Run Code Analysis'
+  displayName: 'Run SonarCloud analysis'
 
-- task: SonarSource.sonarcloud.38b27399-a642-40af-bb7d-9971f69712e8.SonarCloudPublish@1
-  displayName: 'Publish Quality Gate Result'
+- task: SonarCloudPublish@1
+  displayName: 'Publish results on build summary'
+  inputs:
+    pollingTimeoutSec: '300'
